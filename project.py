@@ -1,9 +1,9 @@
 from __future__ import division
 import pyomo.environ as pyo
+from pyomo.opt import SolverFactory
 
 model = pyo.AbstractModel()
-
-
+instance = model.create_instance()
 
 model.I = pyo.Set()
 
@@ -24,6 +24,7 @@ def obj_expression(m):
 
 model.OBJ = pyo.Objective(rule=obj_expression)
 
+
 def x_constraint_rule(m, p):
     # return the expression for the constraint for i
     return sum(m.x[p,b] for b in m.B) == 1
@@ -38,3 +39,6 @@ def sx_constraint_rule(m, b):
 # the next line creates one constraint for each member of the set model.I
 model.sxConstraint = pyo.Constraint(model.P, rule=sx_constraint_rule)
 
+instance = model.create_instance()
+opt = pyo.SolverFactory('glpk')
+opt.solve(instance)
