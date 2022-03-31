@@ -1,23 +1,23 @@
 from __future__ import division
+import re
+from stat import FILE_ATTRIBUTE_ARCHIVE
 import pyomo.environ as pyo
-from pyomo.opt import SolverFactory
+from pyomo.environ import *
+
+FILE = './Instances/bin_pack_20_2.dat'
+
 
 model = pyo.AbstractModel()
-instance = model.create_instance()
-
+data = pyo.DataPortal(model=model)
 model.I = pyo.Set()
-
 model.P = pyo.Set(initialize=model.I)
 model.B = pyo.Set(initialize=model.I)
-
 model.size = pyo.Param(model.P)
-model.cap = pyo.Param(domain=pyo.NonNegativeIntegers)
+model.cap = pyo.Param()
+model.x = pyo.Var(model.P,model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
+model.y = pyo.Var(model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
 
-# the next line declares variable x indexed by the set P and B
-model.x = pyo.Var(model.P,model.I, domain=pyo.NonNegativeReals, bounds=(0,1))
-
-# the next line declares variable y indexed by the set B
-model.y = pyo.Var(model.I, domain=pyo.NonNegativeReals, bounds=(0,1))
+data.load(filename=FILE)
 
 def obj_expression(m):
     return pyo.summation(m.y)
@@ -26,19 +26,23 @@ model.OBJ = pyo.Objective(rule=obj_expression)
 
 
 def x_constraint_rule(m, p):
-    # return the expression for the constraint for i
     return sum(m.x[p,b] for b in m.B) == 1
-
-# the next line creates one constraint for each member of the set model.I
 model.xpbConstraint = pyo.Constraint(model.B, rule=x_constraint_rule)
 
 def sx_constraint_rule(m, b):
-    # return the expression for the constraint for i
     return sum(m.size[p] * m.x[p,b] for p in m.P) <= m.cap*m.y[b]
-
-# the next line creates one constraint for each member of the set model.I
 model.sxConstraint = pyo.Constraint(model.P, rule=sx_constraint_rule)
 
-instance = model.create_instance()
+"""Affichage des résultats"""
+
+instance = model.create_instance(data)
 opt = pyo.SolverFactory('glpk')
-opt.solve(instance)
+result = opt.solve(instance)
+
+print(result)
+
+"""Affichage des résultats"""
+
+for i in instance.x:
+    if pyo.value(instance.x[i]) > 0:
+        print(instance.x[i], "de valeur : ", pyo.value(instance.x[i]))
