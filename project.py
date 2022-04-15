@@ -1,6 +1,8 @@
 from __future__ import division
+
 import re
 from stat import FILE_ATTRIBUTE_ARCHIVE
+from typing import MutableMapping, MutableSequence, MutableSet
 import pyomo.environ as pyo
 from pyomo.environ import *
 
@@ -18,7 +20,7 @@ model.x = pyo.Var(model.P,model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
 model.y = pyo.Var(model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
 
 """Récuperation des données à input dans le modèle"""
-FILE = './Instances/bin_pack_60_2.dat'
+FILE = './Instances/bin_pack_20_1.dat'
 data.load(filename=FILE)
 
 
@@ -36,24 +38,70 @@ def sx_constraint_rule(m, b):
     return sum(m.size[p] * m.x[p,b] for p in m.P) <= m.cap*m.y[b]
 model.sxConstraint = pyo.Constraint(model.P, rule=sx_constraint_rule)
 
+def check_results_x():
+    """Affichage des variable x pour lesqueslles on a un résultat > 0"""
+    for i in instance.x:
+        if (pyo.value(instance.x[i]) > 0.001):
+            print(instance.x[i], "de valeur : ", pyo.value(instance.x[i]))
+def check_results_y():
+    """Affichage des boites utilisées"""
+    for i in instance.y:
+        if (pyo.value(instance.y[i]) > 0):
+            print(instance.y[i], "=", pyo.value(instance.y[i]))
+    
+
 """Affichage des résultats"""
 instance = model.create_instance(data)
 opt = pyo.SolverFactory('glpk')
 result = opt.solve(instance)
-
 print(result)
+
+
+
+"""Réparation des variables x"""
+for k in range(79):
+    temp=1
+    nb = 0
+    key = 0
+    for i in instance.x:
+        val = pyo.value(instance.x[i])
+        if (val>0.01) and (val<1):
+            val2 = min(val,1-val)
+            if val2<temp:
+                temp = val2
+                nb = val
+                key = i
+                print(key)
+                print(val)
+    instance.x[key].fix(round(nb))
+    results = opt.solve(instance)
+    check_results_x()
+    print("INSTANCE ",k," DE LA BOUCLE")
     
-"""Affichage des variable x pour lesqueslles on a un résultat > 0"""
-#for i in instance.x:
-#    if pyo.value(instance.x[i]) > 0:
-#        print(instance.x[i], "de valeur : ", pyo.value(instance.x[i]))
+"""Réparation des variables y"""
+for k in range(5):
+    temp=1
+    nb = 0
+    key = 0
+    for i in instance.y:
+        val = pyo.value(instance.y[i])
+        if (val>0) and (val<1):
+            val2 = min(val,1-val)
+            if val2<temp:
+                temp = val2
+                nb = val
+                key = i
+                print(key)
+                print(val)
+    instance.y[key].fix(round(nb))
+    results = opt.solve(instance)
+    check_results_x()
+    check_results_y()
 
-"""Affichage des boites utilisées"""
-#for i in instance.y:
-#    if pyo.value(instance.y[i]) > 0:
-#        print(instance.y[i], "=", pyo.value(instance.y[i]))
 
-"""Méthode heuristique : First Fit Decreasing"""
+
+
+"""Méthode heuristique : First Fit Decreasing
 def FirstFit(I, cap, size):
     bins = [cap]
     for i in range(len(size)):
@@ -83,3 +131,4 @@ for i in instance.size:
     w.append(instance.size[i])
 
 print(FF_decreasing_heuristic(n,c,w)) 
+"""
