@@ -1,4 +1,5 @@
 from __future__ import division
+from pickle import TRUE
 
 import re
 from stat import FILE_ATTRIBUTE_ARCHIVE
@@ -57,9 +58,21 @@ result = opt.solve(instance)
 print(result)
 
 
+def check_x_is_real():
+    for i in instance.x:
+        if (pyo.value(instance.x[i]) > 0.001) and (pyo.value(instance.x[i]) < 1) :
+            return True
+    return False
+
+def check_y_is_real():
+    for i in instance.y:
+        if (pyo.value(instance.y[i]) > 0.001) and (pyo.value(instance.y[i]) < 1) :
+            return True
+    return False
+    
 
 """Réparation des variables x"""
-for k in range(79):
+while check_x_is_real():
     temp=1
     nb = 0
     key = 0
@@ -76,10 +89,10 @@ for k in range(79):
     instance.x[key].fix(round(nb))
     results = opt.solve(instance)
     check_results_x()
-    print("INSTANCE ",k," DE LA BOUCLE")
+    
     
 """Réparation des variables y"""
-for k in range(5):
+while check_y_is_real():
     temp=1
     nb = 0
     key = 0
