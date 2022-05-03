@@ -1,4 +1,5 @@
 from __future__ import division
+from collections import deque
 from pickle import TRUE
 
 import re
@@ -7,7 +8,22 @@ from typing import MutableMapping, MutableSequence, MutableSet
 import pyomo.environ as pyo
 from pyomo.environ import *
 
+class Node:
+    def __init__(self,ub,lb,cnstr,lvl,dad):
+      self.uper_b = ub
+      self.lower_b = lb
+      self.constraint=cnstr
+      self.tree_lvl= lvl 
+      self.parent_node = dad
 
+    def get_level(self):
+        return self.level
+    
+    def get_parent(self):
+        return self.parent_node
+    
+    def get_constraint(self):
+        return self.constraint
 
 """Etablissement variables et paramètres"""
 model = pyo.AbstractModel()
@@ -39,17 +55,28 @@ def sx_constraint_rule(m, b):
     return sum(m.size[p] * m.x[p,b] for p in m.P) <= m.cap*m.y[b]
 model.sxConstraint = pyo.Constraint(model.P, rule=sx_constraint_rule)
 
-def check_results_x():
+def check_results_x(instnc):
     """Affichage des variable x pour lesqueslles on a un résultat > 0"""
-    for i in instance.x:
-        if (pyo.value(instance.x[i]) > 0.001):
-            print(instance.x[i], "de valeur : ", pyo.value(instance.x[i]))
-def check_results_y():
+    for i in instnc.x:
+        if (pyo.value(instnc.x[i]) > 0.001):
+            print(instnc.x[i], "de valeur : ", pyo.value(instnc.x[i]))
+def check_results_y(instnc):
     """Affichage des boites utilisées"""
-    for i in instance.y:
-        if (pyo.value(instance.y[i]) > 0):
-            print(instance.y[i], "=", pyo.value(instance.y[i]))
-    
+    for i in instnc.y:
+        if (pyo.value(instnc.y[i]) > 0):
+            print(instnc.y[i], "=", pyo.value(instnc.y[i]))
+
+def check_x_is_real(instnc):
+    for i in instnc.x:
+        if (pyo.value(instance.x[i]) > 0.001) and (pyo.value(instance.x[i]) < 1) :
+            return True
+    return False
+
+def check_y_is_real(instnc):
+    for i in instnc.y:
+        if (pyo.value(instance.y[i]) > 0.001) and (pyo.value(instance.y[i]) < 1) :
+            return True
+    return False    
 
 """Affichage des résultats"""
 instance = model.create_instance(data)
@@ -57,22 +84,35 @@ opt = pyo.SolverFactory('glpk')
 result = opt.solve(instance)
 print(result)
 
+current = Node(None,None,None,0,None)
+visited = []
+visited.append(current)
+q = deque([current])
+while len(q) != 0:
+    current = q.popleft()  # Breadth
 
-def check_x_is_real():
-    for i in instance.x:
-        if (pyo.value(instance.x[i]) > 0.001) and (pyo.value(instance.x[i]) < 1) :
-            return True
-    return False
+    # code où on résout le problème on fixe la low bound du current node (en nb décimal)
 
-def check_y_is_real():
-    for i in instance.y:
-        if (pyo.value(instance.y[i]) > 0.001) and (pyo.value(instance.y[i]) < 1) :
-            return True
-    return False
+    # code où on répare la solution et on fixe la upper bound(en nb entier)
+
+    # code où on selectionne la variable qui va imposer la nouvelle contrainte cad x12 <= 0 et x12 >= 1
+
+    # code où on check si ça vaut la peine (condition de :feasabilité de resolution du pb / ub = lb / solution entière) de visiter
+    # ce noeud et 
+    # si OUI, ajouter 2 nodes dans la deque q pour les visiter et on ajoute de nouvelles contraintes
+    # (via une liste de contraintes où on recupère les contraintes des nodes dad) au pb de base qd on resout le prob
+    # si NON, on refait une boucle while 
+
+
+    if current[0] == 7 or current[0] == 6:
+        print(f"Found Goal {current[0]} with cost: {current[1]}")
+        break
     
 
-"""Réparation des variables x"""
-while check_x_is_real():
+
+
+"""Réparation des variables x
+while check_x_is_real(instance):
     temp=1
     nb = 0
     key = 0
@@ -88,11 +128,11 @@ while check_x_is_real():
                 print(val)
     instance.x[key].fix(round(nb))
     results = opt.solve(instance)
-    check_results_x()
+    check_results_x(instance)
+"""
     
-    
-"""Réparation des variables y"""
-while check_y_is_real():
+"""Réparation des variables y
+while check_y_is_real(instance):
     temp=1
     nb = 0
     key = 0
@@ -108,10 +148,9 @@ while check_y_is_real():
                 print(val)
     instance.y[key].fix(round(nb))
     results = opt.solve(instance)
-    check_results_x()
-    check_results_y()
-
-
+    check_results_x(instance)
+    check_results_y(instance)
+"""
 
 
 """Méthode heuristique : First Fit Decreasing
