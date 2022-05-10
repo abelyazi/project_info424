@@ -4,6 +4,7 @@ from pickle import TRUE
 
 import re
 from stat import FILE_ATTRIBUTE_ARCHIVE
+import time
 from typing import MutableMapping, MutableSequence, MutableSet
 import pyomo.environ as pyo
 from pyomo.environ import *
@@ -19,11 +20,25 @@ class Node:
     def get_level(self):
         return self.level
     
-    def get_parent(self):
+    def get_dad(self):
         return self.parent_node
     
     def get_constraint(self):
         return self.constraint
+
+    def get_ub(self):
+        return self.uper_b
+
+    def get_lb(self):
+        return self.lower_b
+
+    def set_ub(self,ub):
+        self.uper_b = ub
+
+    def set_lb(self,lb):
+        self.lower_b,lb
+    
+
 
 """Etablissement variables et paramètres"""
 model = pyo.AbstractModel()
@@ -35,10 +50,7 @@ model.size = pyo.Param(model.P)
 model.cap = pyo.Param()
 model.x = pyo.Var(model.P,model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
 model.y = pyo.Var(model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
-
-"""Récuperation des données à input dans le modèle"""
-FILE = './Instances/bin_pack_20_1.dat'
-data.load(filename=FILE)
+model.Constraints = pyo.ConstraintList()
 
 
 """Etablissement fonction objective"""
@@ -78,36 +90,134 @@ def check_y_is_real(instnc):
             return True
     return False    
 
-"""Affichage des résultats"""
-instance = model.create_instance(data)
-opt = pyo.SolverFactory('glpk')
-result = opt.solve(instance)
-print(result)
+# Résolution d'une instance quelconque
+def solve_instnc(instnc):
+    instance = instnc
+    opt = pyo.SolverFactory('glpk')
+    start_time = time.time()
+    opt.solve(instance)
+    print("LP solved in %s seconds." % (time.time() - start_time))
+    x = []
+    for p in range(len(list(instance.size))):
+        x.append([])
+        for b in range(len(list(instance.size))):
+            x[p].append(0)
+    for p in range(len(list(instance.size))):
+        for b in range(len(list(instance.size))):
+            x[p][b] = pyo.value(instance.x[p, b])
+    y = []
+    for i in instance.y:
+        y.append(pyo.value(instance.y[i]))
 
-current = Node(None,None,None,0,None)
+    obj = instance.OBJ()
+    #solution = obj,x,y
+    return obj, x, y
+
+# Résolution
+def solve_bp_lp(instance_name):
+    instance_name="bin_pack_20_2.dat"
+    file = './Instances/' + instance_name
+    data.load(filename=file)
+
+    instance = model.create_instance(data)
+    opt = pyo.SolverFactory('glpk')
+    start_time = time.time()
+    opt.solve(instance)
+    print("LP solved in %s seconds." % (time.time() - start_time))
+
+
+    x = []
+    for p in range(len(list(instance.size))):
+        x.append([])
+        for b in range(len(list(instance.size))):
+            x[p].append(0)
+    for p in range(len(list(instance.size))):
+        for b in range(len(list(instance.size))):
+            x[p][b] = pyo.value(instance.x[p, b])
+
+    y = []
+    for i in instance.y:
+        y.append(pyo.value(instance.y[i]))
+
+    obj = instance.OBJ()
+    #solution = obj,x,y
+    return obj, x, y, instance
+
+
+
+# Résolution du noeud racine
+solution = solve_bp_lp("bin_pack_20_2.dat")
+instance = solution[3]
+lvl = 0
 visited = []
-visited.append(current)
-q = deque([current])
-while len(q) != 0:
+q = deque([])
+q.append(Node(None,None,None,lvl,None))
+while (len(q) != 0)and(lvl<450):
     current = q.popleft()  # Breadth
+    current_instance = instance
 
-    # code où on résout le problème on fixe la low bound du current node (en nb décimal)
+    # step 1 on remplit la liste de containtes avec les contraintes des noeuds parents jusqu'au noeud racine
+    constraints=[]
+    temp_current = current
+    while temp_current.get_constraint() != None:
+        constraints.append(temp_current.get_constraint())
+        if temp_current.get_dad() != None:
+            temp_current = temp_current.get_dad()
+    #print(constraints)
 
-    # code où on répare la solution et on fixe la upper bound(en nb entier)
-
-    # code où on selectionne la variable qui va imposer la nouvelle contrainte cad x12 <= 0 et x12 >= 1
-
-    # code où on check si ça vaut la peine (condition de :feasabilité de resolution du pb / ub = lb / solution entière) de visiter
-    # ce noeud et 
-    # si OUI, ajouter 2 nodes dans la deque q pour les visiter et on ajoute de nouvelles contraintes
-    # (via une liste de contraintes où on recupère les contraintes des nodes dad) au pb de base qd on resout le prob
-    # si NON, on refait une boucle while 
-
-
-    if current[0] == 7 or current[0] == 6:
-        print(f"Found Goal {current[0]} with cost: {current[1]}")
-        break
+    # step 2 établissement lb : résolution du problem en ajoutant la liste constraintes au problème de base
+    for i in constraints:
+        expr = 0
+        expr += current_instance.x[i[0]]
+        if i[1] == 0:
+            current_instance.x[i[0]].fix(0)
+        elif i[1] == 1:
+            current_instance.x[i[0]].fix(1)
     
+    current_sol = solve_instnc(current_instance)
+    lb = current_sol[0] #résultat de la fonction objective
+    current.set_lb(lb)
+    #print(lb)
+
+    # step 3 etablissement ub : réparation de la solution trouvé et établissement du lb
+
+    # step 4 if solution trouvée possède soit ub!=lb, soit sol faisable non entière
+    
+    ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
+    ## pour les noeuds fils
+    x = current_sol[1]
+    temp = 1
+    for i in range(len(x)):
+        for j in range(len(x[i])):
+            val = x[i][j]
+            if (val>0.01) and (val<1):
+                val2 = min(val,1-val)
+                if val2<temp:
+                    temp = val2
+                    a,b = i,j
+                    #print(current_instance.x[(a,b)])
+    print(x[a][b]) 
+    fils_constraints=[[(a,b),1],[(a,b),0]]
+
+    ## step 4.2 création des deux noeuds et on les ajoute à la queue q
+    node1= Node(None,None,fils_constraints[0],lvl+1,current)
+    node2= Node(None,None,fils_constraints[1],lvl+1,current)
+    q.append(node1)
+    q.append(node2)
+
+    # step 5 
+    visited.append(current)
+    
+    lvl+=1
+    
+
+   
+
+"""
+if current[0] == 7 or current[0] == 6:
+    print(f"Found Goal {current[0]} with cost: {current[1]}")
+    break
+"""   
 
 
 
