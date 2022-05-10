@@ -1,5 +1,6 @@
 from __future__ import division
 from collections import deque
+from copy import deepcopy
 from pickle import TRUE
 
 import re
@@ -152,13 +153,13 @@ lvl = 0
 visited = []
 q = deque([])
 q.append(Node(None,None,None,lvl,None))
-while (len(q) != 0)and(lvl<450):
-    current = q.popleft()  # Breadth
-    current_instance = instance
+while (len(q) != 0)and(lvl<50):
+    current = q.pop()  # Breadth
+    current_instance = deepcopy(instance)
 
     # step 1 on remplit la liste de containtes avec les contraintes des noeuds parents jusqu'au noeud racine
     constraints=[]
-    temp_current = current
+    temp_current = deepcopy(current)
     while temp_current.get_constraint() != None:
         constraints.append(temp_current.get_constraint())
         if temp_current.get_dad() != None:
@@ -170,14 +171,16 @@ while (len(q) != 0)and(lvl<450):
         expr = 0
         expr += current_instance.x[i[0]]
         if i[1] == 0:
-            current_instance.x[i[0]].fix(0)
+            current_instance.Constraints.add( expr <= 0 )
+            print("Ali")
         elif i[1] == 1:
-            current_instance.x[i[0]].fix(1)
+            current_instance.Constraints.add( expr >= 1 )
+            
     
     current_sol = solve_instnc(current_instance)
-    lb = current_sol[0] #résultat de la fonction objective
+    lb = deepcopy(current_sol[0]) #résultat de la fonction objective
     current.set_lb(lb)
-    #print(lb)
+    print(lb)
 
     # step 3 etablissement ub : réparation de la solution trouvé et établissement du lb
 
@@ -185,28 +188,28 @@ while (len(q) != 0)and(lvl<450):
     
     ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
     ## pour les noeuds fils
-    x = current_sol[1]
-    temp = 1
+    x = deepcopy(current_sol[1])
+    temp=1
     for i in range(len(x)):
         for j in range(len(x[i])):
             val = x[i][j]
             if (val>0.01) and (val<1):
-                val2 = min(val,1-val)
+                val2 = 1-val
                 if val2<temp:
                     temp = val2
                     a,b = i,j
                     #print(current_instance.x[(a,b)])
     print(x[a][b]) 
-    fils_constraints=[[(a,b),1],[(a,b),0]]
+    fils_constraints=[[(a,b),0],[(a,b),1]]
+
 
     ## step 4.2 création des deux noeuds et on les ajoute à la queue q
-    node1= Node(None,None,fils_constraints[0],lvl+1,current)
-    node2= Node(None,None,fils_constraints[1],lvl+1,current)
-    q.append(node1)
-    q.append(node2)
+    q.append(Node(None,None,fils_constraints[0],lvl+1,deepcopy(current)))
+    q.append(Node(None,None,fils_constraints[1],lvl+1,deepcopy(current)))
+
 
     # step 5 
-    visited.append(current)
+    visited.append(deepcopy(current))
     
     lvl+=1
     
