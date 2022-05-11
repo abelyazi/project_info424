@@ -90,7 +90,7 @@ def check_x_is_real(instnc):
 
 def check_y_is_real(instnc):
     for i in instnc.y:
-        if (pyo.value(instance.y[i]) > 0.001) and (pyo.value(instance.y[i]) < 1) :
+        if (pyo.value(instnc.y[i]) > 0) and (pyo.value(instnc.y[i]) < 1) :
             return True
     return False    
 
@@ -133,7 +133,7 @@ iteration = 0
 visited = []
 q = deque([])
 q.append(Node(None,None,None,0,None))
-while (len(q) != 0)and(iteration<250):
+while (len(q) != 0)and(iteration<1000):
     current = q.pop()  # Depth
     #current = q.popleft() # Breadth
     current_instance = deepcopy(instance)
@@ -150,11 +150,17 @@ while (len(q) != 0)and(iteration<250):
             temp_current = deepcopy(temp_current.get_dad())
 
     for const in constraints:
-        key = const[0] #(a,b) if key[0] == 20 
-        if const[1] == 0:
-                current_instance.Constraints.add( current_instance.x[key] <= 0 )
-        elif const[1] == 1:
-                current_instance.Constraints.add( current_instance.x[key] >= 1 )
+        key = const[0] #(a,b) 
+        if key[0] == 20:
+            if const[1] == 0:
+                    current_instance.Constraints.add( current_instance.y[key[1]] <= 0 )
+            elif const[1] == 1:
+                    current_instance.Constraints.add( current_instance.y[key[1]] >= 1 )
+        elif key[0] != 20:
+            if const[1] == 0:
+                    current_instance.Constraints.add( current_instance.x[key] <= 0 )
+            elif const[1] == 1:
+                    current_instance.Constraints.add( current_instance.x[key] >= 1 )
 
        
         
@@ -171,23 +177,23 @@ while (len(q) != 0)and(iteration<250):
     
     ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
     ## pour les noeuds fils
-    x=[]
+    xy_matrix=[]
     if lb != 0:
-        if check_x_is_real(current_instance)==True:
-            x = deepcopy(current_sol[1])
-            #y = deepcopy(current_sol[2])
-            #var = x.append(y)
+        if check_x_is_real(current_instance)==True or (check_y_is_real(current_instance)==True):
+            xy_matrix = deepcopy(current_sol[1])
+            y = deepcopy(current_sol[2])
+            xy_matrix.append(y)
             temp=0
-            for i in range(len(x)):
-                for j in range(len(x[i])):
-                    val = x[i][j]
+            for i in range(len(xy_matrix)):
+                for j in range(len(xy_matrix[i])):
+                    val = xy_matrix[i][j]
                     if (val>0) and (val<1):
                         if val>temp:
                             temp = val
                             a,b = i,j
                             #print(current_instance.x[(a,b)])
             print((a,b))               
-            print(x[a][b]) 
+            print(xy_matrix[a][b]) 
             fils_constraints=[[(a,b),0],[(a,b),1]]
             ## step 4.2 création des deux noeuds et on les ajoute à la queue q
             q.append(Node(None,None,fils_constraints[0],current.get_level()+1,deepcopy(current)))
@@ -199,11 +205,11 @@ while (len(q) != 0)and(iteration<250):
     visited.append(deepcopy(current))
     
     iteration+=1
-for node in visited:
-    print(node.get_level())
+#for node in visited:
+#    print(node.get_level())
 
-check_results_x(current_instance)
-check_results_y(current_instance)
+#check_results_x(current_instance)
+#check_results_y(current_instance)
 
    
 
