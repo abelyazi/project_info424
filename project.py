@@ -1,6 +1,8 @@
 from __future__ import division
+from cmath import inf
 from collections import deque
 from copy import deepcopy
+from distutils.log import ERROR
 from pickle import TRUE
 
 import re
@@ -17,9 +19,10 @@ class Node:
       self.constraint=cnstr
       self.tree_lvl= lvl 
       self.parent_node = dad
+      
 
     def get_level(self):
-        return self.level
+        return self.tree_lvl
     
     def get_dad(self):
         return self.parent_node
@@ -62,16 +65,16 @@ model.OBJ = pyo.Objective(rule=obj_expression)
 """Etablissement des contraintes"""
 def x_constraint_rule(m, p):
     return sum(m.x[p,b] for b in m.B) == 1
-model.xpbConstraint = pyo.Constraint(model.B, rule=x_constraint_rule)
+model.xpbConstraint = pyo.Constraint(model.P, rule=x_constraint_rule)
 
 def sx_constraint_rule(m, b):
     return sum(m.size[p] * m.x[p,b] for p in m.P) <= m.cap*m.y[b]
-model.sxConstraint = pyo.Constraint(model.P, rule=sx_constraint_rule)
+model.sxConstraint = pyo.Constraint(model.B, rule=sx_constraint_rule)
 
 def check_results_x(instnc):
     """Affichage des variable x pour lesqueslles on a un résultat > 0"""
     for i in instnc.x:
-        if (pyo.value(instnc.x[i]) > 0.001):
+        if (pyo.value(instnc.x[i]) > 0):
             print(instnc.x[i], "de valeur : ", pyo.value(instnc.x[i]))
 def check_results_y(instnc):
     """Affichage des boites utilisées"""
@@ -81,7 +84,7 @@ def check_results_y(instnc):
 
 def check_x_is_real(instnc):
     for i in instnc.x:
-        if (pyo.value(instance.x[i]) > 0.001) and (pyo.value(instance.x[i]) < 1) :
+        if (pyo.value(instnc.x[i]) > 0) and (pyo.value(instnc.x[i]) < 1) :
             return True
     return False
 
@@ -93,90 +96,70 @@ def check_y_is_real(instnc):
 
 # Résolution d'une instance quelconque
 def solve_instnc(instnc):
-    instance = instnc
-    opt = pyo.SolverFactory('glpk')
-    start_time = time.time()
-    opt.solve(instance)
-    print("LP solved in %s seconds." % (time.time() - start_time))
-    x = []
-    for p in range(len(list(instance.size))):
-        x.append([])
-        for b in range(len(list(instance.size))):
-            x[p].append(0)
-    for p in range(len(list(instance.size))):
-        for b in range(len(list(instance.size))):
-            x[p][b] = pyo.value(instance.x[p, b])
-    y = []
-    for i in instance.y:
-        y.append(pyo.value(instance.y[i]))
-
-    obj = instance.OBJ()
-    #solution = obj,x,y
-    return obj, x, y
-
-# Résolution
-def solve_bp_lp(instance_name):
-    instance_name="bin_pack_20_2.dat"
-    file = './Instances/' + instance_name
-    data.load(filename=file)
-
-    instance = model.create_instance(data)
-    opt = pyo.SolverFactory('glpk')
-    start_time = time.time()
-    opt.solve(instance)
-    print("LP solved in %s seconds." % (time.time() - start_time))
+    try:
+        instance = instnc
+        opt = pyo.SolverFactory('glpk')
+        start_time = time.time()
+        opt.solve(instance)
+        print("LP solved in %s seconds." % (time.time() - start_time))
+        x = []
+        for p in range(len(list(instance.size))):
+            x.append([])
+            for b in range(len(list(instance.size))):
+                x[p].append(0)
+        for p in range(len(list(instance.size))):
+            for b in range(len(list(instance.size))):
+                x[p][b] = pyo.value(instance.x[p, b])
+        y = []
+        for i in instance.y:
+            y.append(pyo.value(instance.y[i]))
+        obj = instance.OBJ()
+        #solution = obj,x,y
+        return obj, x, y
+    except:
+        print("Solution Infeasible")
+        obj = (0,0,0)
+        return obj 
 
 
-    x = []
-    for p in range(len(list(instance.size))):
-        x.append([])
-        for b in range(len(list(instance.size))):
-            x[p].append(0)
-    for p in range(len(list(instance.size))):
-        for b in range(len(list(instance.size))):
-            x[p][b] = pyo.value(instance.x[p, b])
 
-    y = []
-    for i in instance.y:
-        y.append(pyo.value(instance.y[i]))
-
-    obj = instance.OBJ()
-    #solution = obj,x,y
-    return obj, x, y, instance
-
-
+instance_name="bin_pack_20_2.dat"
+file = './Instances/' + instance_name
+data.load(filename=file)
+instance = model.create_instance(data)
 
 # Résolution du noeud racine
-solution = solve_bp_lp("bin_pack_20_2.dat")
-instance = solution[3]
-lvl = 0
+iteration = 0
 visited = []
 q = deque([])
-q.append(Node(None,None,None,lvl,None))
-while (len(q) != 0)and(lvl<50):
-    current = q.pop()  # Breadth
+q.append(Node(None,None,None,0,None))
+while (len(q) != 0)and(iteration<250):
+    current = q.pop()  # Depth
+    #current = q.popleft() # Breadth
     current_instance = deepcopy(instance)
 
-    # step 1 on remplit la liste de containtes avec les contraintes des noeuds parents jusqu'au noeud racine
+
+    # step 1 on ajoute la contrainte du current_node à l'instance du noeud
+
     constraints=[]
     temp_current = deepcopy(current)
+
     while temp_current.get_constraint() != None:
-        constraints.append(temp_current.get_constraint())
+        constraints.append(deepcopy(temp_current.get_constraint()))
         if temp_current.get_dad() != None:
-            temp_current = temp_current.get_dad()
-    #print(constraints)
+            temp_current = deepcopy(temp_current.get_dad())
+
+    for const in constraints:
+        key = const[0]
+        if const[1] == 0:
+                current_instance.Constraints.add( current_instance.x[key] <= 0 )
+        elif const[1] == 1:
+                current_instance.Constraints.add( current_instance.x[key] >= 1 )
+
+       
+        
 
     # step 2 établissement lb : résolution du problem en ajoutant la liste constraintes au problème de base
-    for i in constraints:
-        expr = 0
-        expr += current_instance.x[i[0]]
-        if i[1] == 0:
-            current_instance.Constraints.add( expr <= 0 )
-            print("Ali")
-        elif i[1] == 1:
-            current_instance.Constraints.add( expr >= 1 )
-            
-    
     current_sol = solve_instnc(current_instance)
     lb = deepcopy(current_sol[0]) #résultat de la fonction objective
     current.set_lb(lb)
@@ -188,31 +171,38 @@ while (len(q) != 0)and(lvl<50):
     
     ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
     ## pour les noeuds fils
-    x = deepcopy(current_sol[1])
-    temp=1
-    for i in range(len(x)):
-        for j in range(len(x[i])):
-            val = x[i][j]
-            if (val>0.01) and (val<1):
-                val2 = 1-val
-                if val2<temp:
-                    temp = val2
-                    a,b = i,j
-                    #print(current_instance.x[(a,b)])
-    print(x[a][b]) 
-    fils_constraints=[[(a,b),0],[(a,b),1]]
-
-
-    ## step 4.2 création des deux noeuds et on les ajoute à la queue q
-    q.append(Node(None,None,fils_constraints[0],lvl+1,deepcopy(current)))
-    q.append(Node(None,None,fils_constraints[1],lvl+1,deepcopy(current)))
+    if lb != 0:
+        if check_x_is_real(current_instance)==True:
+            x = deepcopy(current_sol[1])
+            y = deepcopy(current_sol[2])
+            var = x.append(y)
+            temp=0
+            for i in range(len(var)):
+                for j in range(len(var[i])):
+                    val = var[i][j]
+                    if (val>0) and (val<1):
+                        if val>temp:
+                            temp = val
+                            a,b = i,j
+                            #print(current_instance.x[(a,b)])
+            print((a,b))               
+            print(x[a][b]) 
+            fils_constraints=[[(a,b),0],[(a,b),1]]
+            ## step 4.2 création des deux noeuds et on les ajoute à la queue q
+            q.append(Node(None,None,fils_constraints[0],current.get_level()+1,deepcopy(current)))
+            q.append(Node(None,None,fils_constraints[1],current.get_level()+1,deepcopy(current)))
+        
 
 
     # step 5 
     visited.append(deepcopy(current))
     
-    lvl+=1
-    
+    iteration+=1
+for node in visited:
+    print(node.get_level())
+
+check_results_x(current_instance)
+check_results_y(current_instance)
 
    
 
