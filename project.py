@@ -150,7 +150,7 @@ while (len(q) != 0)and(iteration<250):
             temp_current = deepcopy(temp_current.get_dad())
 
     for const in constraints:
-        key = const[0]
+        key = const[0] #(a,b) if key[0] == 20 
         if const[1] == 0:
                 current_instance.Constraints.add( current_instance.x[key] <= 0 )
         elif const[1] == 1:
@@ -171,15 +171,16 @@ while (len(q) != 0)and(iteration<250):
     
     ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
     ## pour les noeuds fils
+    x=[]
     if lb != 0:
         if check_x_is_real(current_instance)==True:
             x = deepcopy(current_sol[1])
-            y = deepcopy(current_sol[2])
-            var = x.append(y)
+            #y = deepcopy(current_sol[2])
+            #var = x.append(y)
             temp=0
-            for i in range(len(var)):
-                for j in range(len(var[i])):
-                    val = var[i][j]
+            for i in range(len(x)):
+                for j in range(len(x[i])):
+                    val = x[i][j]
                     if (val>0) and (val<1):
                         if val>temp:
                             temp = val
