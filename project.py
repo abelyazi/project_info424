@@ -2,7 +2,6 @@ from __future__ import division
 from cmath import inf
 from collections import deque
 from copy import deepcopy
-from distutils.log import ERROR
 from pickle import TRUE
 
 import re
@@ -40,7 +39,7 @@ class Node:
         self.uper_b = ub
 
     def set_lb(self,lb):
-        self.lower_b,lb
+        self.lower_b = lb
     
 
 
@@ -94,6 +93,17 @@ def check_y_is_real(instnc):
             return True
     return False    
 
+def check_dad_ub_are_bigger_than_lb_current(node):
+    current_n = deepcopy(node)
+    l_b = node.get_lb()
+    while current_n != None :
+        #print("Lower Bound du noeud au lvl", node.get_level(),":", l_b)
+        #print("Upper Bound du noeud au lvl", current_n.get_level(),":", current_n.get_ub())
+        if l_b > current_n.get_ub():
+            return False
+        current_n = deepcopy(current_n.get_dad())
+    return True
+
 # Résolution d'une instance quelconque
 def solve_instnc(instnc):
     try:
@@ -121,19 +131,24 @@ def solve_instnc(instnc):
         obj = (0,0,0)
         return obj 
 
-
-
-instance_name="bin_pack_20_2.dat"
+instance_name="bin_pack_60_2.dat"
 file = './Instances/' + instance_name
 data.load(filename=file)
 instance = model.create_instance(data)
+
+#ajout des contraintes yj >= yj+1
+for j in range(len(list(instance.size))-1):
+    instance.Constraints.add(instance.y[j] >= instance.y[j+1] )
+
 
 # Résolution du noeud racine
 iteration = 0
 visited = []
 q = deque([])
 q.append(Node(None,None,None,0,None))
-while (len(q) != 0)and(iteration<1000):
+start_time1 = time.time()
+
+while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
     current = q.pop()  # Depth
     #current = q.popleft() # Breadth
     current_instance = deepcopy(instance)
@@ -151,53 +166,81 @@ while (len(q) != 0)and(iteration<1000):
 
     for const in constraints:
         key = const[0] #(a,b) 
-        if key[0] == 20:
-            if const[1] == 0:
-                    current_instance.Constraints.add( current_instance.y[key[1]] <= 0 )
-            elif const[1] == 1:
-                    current_instance.Constraints.add( current_instance.y[key[1]] >= 1 )
-        elif key[0] != 20:
-            if const[1] == 0:
-                    current_instance.Constraints.add( current_instance.x[key] <= 0 )
-            elif const[1] == 1:
-                    current_instance.Constraints.add( current_instance.x[key] >= 1 )
+        if const[1] == 0:
+                current_instance.Constraints.add( current_instance.x[key] <= 0 )
+        elif const[1] == 1:
+                current_instance.Constraints.add( current_instance.x[key] >= 1 )
 
-       
-        
 
     # step 2 établissement lb : résolution du problem en ajoutant la liste constraintes au problème de base
     current_sol = solve_instnc(current_instance)
-    lb = deepcopy(current_sol[0]) #résultat de la fonction objective
-    current.set_lb(lb)
-    print(lb)
+    lb = ceil(deepcopy(current_sol[0])) #résultat de la fonction objective arrondis à la valeur supérieur car on traitre des solutions entières
+    
+    current.set_lb(deepcopy(lb))
+    print("THIS IS LB ",lb)
 
+    
     # step 3 etablissement ub : réparation de la solution trouvé et établissement du lb
+    if (lb!=0):
+        x = deepcopy(current_sol[1])
+        y = deepcopy(current_sol[2])
+        ## step 3.1 on multiplie chaque élement xij par la taille du paquet i
+        x_temp = deepcopy(x)
+        x_ij = []
+        for p in range(len(x_temp)):
+            for b in range(len(x_temp[p])):
+                if x_temp[p][b] > 0: 
+                    x_temp[p][b] *= pyo.value(instance.size[p])
+                    x_ij.append((x_temp[p][b],(p,b)))
 
+            
+
+        
+        
+        # step 3.2 on parcourt les éléments de x_ij (triés) et on ajoute les paquets dans les boites une par une
+        x_ij = sorted(x_ij,reverse=True)
+        #print(x_ij)
+        capa_y = [0 for i in range(len(y))]
+        presence_x = [0 for i in range(len(x))]
+        capa = pyo.value(current_instance.cap)
+        boxes_used = 0
+        for elem in x_ij:
+            packet_index = elem[1][0]
+            box_index = 0
+            if presence_x[packet_index]==0:
+                presence_x[packet_index]=1
+                while ((current_instance.size[packet_index] + capa_y[box_index]) > capa) and box_index < len(y):
+                    box_index += 1
+                if capa_y[box_index]==0:
+                    boxes_used +=1
+                capa_y[box_index] += current_instance.size[packet_index]
+
+        ub = boxes_used
+        current.set_ub(ub)
+        print("THIS IS UB",ub)
+    
     # step 4 if solution trouvée possède soit ub!=lb, soit sol faisable non entière
     
     ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
     ## pour les noeuds fils
-    xy_matrix=[]
-    if lb != 0:
-        if check_x_is_real(current_instance)==True or (check_y_is_real(current_instance)==True):
-            xy_matrix = deepcopy(current_sol[1])
-            y = deepcopy(current_sol[2])
-            xy_matrix.append(y)
-            temp=0
-            for i in range(len(xy_matrix)):
-                for j in range(len(xy_matrix[i])):
-                    val = xy_matrix[i][j]
-                    if (val>0) and (val<1):
-                        if val>temp:
-                            temp = val
-                            a,b = i,j
-                            #print(current_instance.x[(a,b)])
-            print((a,b))               
-            print(xy_matrix[a][b]) 
-            fils_constraints=[[(a,b),0],[(a,b),1]]
-            ## step 4.2 création des deux noeuds et on les ajoute à la queue q
-            q.append(Node(None,None,fils_constraints[0],current.get_level()+1,deepcopy(current)))
-            q.append(Node(None,None,fils_constraints[1],current.get_level()+1,deepcopy(current)))
+        if ub>lb and (check_dad_ub_are_bigger_than_lb_current(current)==True):
+            if check_x_is_real(current_instance)==True:            
+                temp=0
+                for i in range(len(x)):
+                    for j in range(len(x[i])):
+                        val = x[i][j]
+                        if (val>0) and (val<1):
+                            if val>temp:
+                                temp = val
+                                a,b = i,j
+                                #print(current_instance.x[(a,b)])
+                print((a,b))               
+                print(x[a][b]) 
+                fils_constraints=[[(a,b),0],[(a,b),1]]
+                ## step 4.2 création des deux noeuds et on les ajoute à la queue q
+                q.append(Node(None,None,fils_constraints[0],current.get_level()+1,deepcopy(current)))
+                q.append(Node(None,None,fils_constraints[1],current.get_level()+1,deepcopy(current)))
+                #check_results_x(current_instance)
         
 
 
