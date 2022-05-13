@@ -12,12 +12,14 @@ import pyomo.environ as pyo
 from pyomo.environ import *
 
 class Node:
-    def __init__(self,ub,lb,cnstr,lvl,dad):
+    def __init__(self,ub,lb,cnstr,lvl,dad,l_child,r_child):
       self.uper_b = ub
       self.lower_b = lb
       self.constraint=cnstr
       self.tree_lvl= lvl 
       self.parent_node = dad
+      self.left_child = l_child
+      self.right_child = r_child
       
 
     def get_level(self):
@@ -31,15 +33,59 @@ class Node:
 
     def get_ub(self):
         return self.uper_b
-
+    
+    def get_left_child(self):
+        return self.left_child
+    
+    def get_right_child(self):
+        return self.right_child
+    
     def get_lb(self):
         return self.lower_b
+
+    def set_dad(self,dad):
+        self.parent_node = dad
+    
+    def set_left_child(self,l_child):
+        self.left_child=l_child
+    
+    def set_right_child(self,r_child):
+        self.right_child=r_child
 
     def set_ub(self,ub):
         self.uper_b = ub
 
     def set_lb(self,lb):
         self.lower_b = lb
+    
+    def update_lb_ub(self):
+        if self.get_dad() != None:
+            dad = self.get_dad()
+            left_child = dad.get_left_child()
+            right_child = dad.get_right_child()
+            if (right_child.get_ub() != None) and (left_child.get_ub() != None):
+                ub_min = min(right_child.get_ub(),left_child.get_ub())
+                lb_min = min(right_child.get_lb(),left_child.get_lb())
+
+                if (right_child.get_lb()==0) or (left_child.get_lb()==0):
+                    lb_min = right_child.get_lb() + left_child.get_lb()
+                
+                new_bound = False
+
+                if ub_min != dad.get_ub():
+                    print("chgt ub")
+                    self.get_dad().set_ub(ub_min)
+                    new_bound = True
+
+                if lb_min != dad.get_lb():
+                    print("chgt lb")
+                    self.get_dad().set_lb(lb_min)
+                    new_bound = True
+
+                if new_bound==True:
+                    self.get_dad().update_lb_ub()
+
+            
     
 
 
@@ -103,6 +149,8 @@ def check_dad_ub_are_bigger_than_lb_current(node):
             return False
         current_n = deepcopy(current_n.get_dad())
     return True
+            
+
 
 # Résolution d'une instance quelconque
 def solve_instnc(instnc):
@@ -131,7 +179,7 @@ def solve_instnc(instnc):
         obj = (0,0,0)
         return obj 
 
-instance_name="bin_pack_60_2.dat"
+instance_name="bin_pack_40_1.dat"
 file = './Instances/' + instance_name
 data.load(filename=file)
 instance = model.create_instance(data)
@@ -145,12 +193,40 @@ for j in range(len(list(instance.size))-1):
 iteration = 0
 visited = []
 q = deque([])
-q.append(Node(None,None,None,0,None))
+root_node = Node(None,None,None,0,None,None,None)
+q.append(root_node)
 start_time1 = time.time()
-
 while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
     current = q.pop()  # Depth
     #current = q.popleft() # Breadth
+    if current == root_node:
+        tree_node = root_node
+    
+    elif current != root_node:
+        if tree_node.get_level() < current.get_level():
+            temp_node = current.get_dad()
+            while (temp_node.get_left_child()!=current) and (temp_node.get_right_child()!=current):
+                temp_node = current.get_dad()
+            if temp_node.get_left_child()==current:
+                print("trouvey1")
+                tree_node = tree_node.get_left_child()
+            if temp_node.get_right_child()==current:
+                print("trouvey2")
+                tree_node = tree_node.get_right_child()
+
+        elif tree_node.get_level() >= current.get_level():
+            tree_node = tree_node.get_dad()
+            while (tree_node.get_left_child()!=current) and (tree_node.get_right_child()!=current):
+                tree_node = tree_node.get_dad()
+            if tree_node.get_left_child()==current:
+                print("trouvey3")
+                tree_node = tree_node.get_left_child()
+            if tree_node.get_right_child()==current:
+                print("trouvey4")
+                tree_node = tree_node.get_right_child()
+            
+
+
     current_instance = deepcopy(instance)
 
 
@@ -176,7 +252,9 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
     current_sol = solve_instnc(current_instance)
     lb = ceil(deepcopy(current_sol[0])) #résultat de la fonction objective arrondis à la valeur supérieur car on traitre des solutions entières
     
-    current.set_lb(deepcopy(lb))
+    current.set_lb(lb)
+    tree_node.set_lb(lb)
+
     print("THIS IS LB ",lb)
 
     
@@ -194,8 +272,6 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
                     x_ij.append((x_temp[p][b],(p,b)))
 
             
-
-        
         
         # step 3.2 on parcourt les éléments de x_ij (triés) et on ajoute les paquets dans les boites une par une
         x_ij = sorted(x_ij,reverse=True)
@@ -217,12 +293,14 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
 
         ub = boxes_used
         current.set_ub(ub)
+        tree_node.set_ub(ub)
         print("THIS IS UB",ub)
     
     # step 4 if solution trouvée possède soit ub!=lb, soit sol faisable non entière
     
     ## step 4.1 sélection de la variable sur laquelle on va imposer la constrainte >= 1 et <= 0
     ## pour les noeuds fils
+
         if ub>lb and (check_dad_ub_are_bigger_than_lb_current(current)==True):
             if check_x_is_real(current_instance)==True:            
                 temp=0
@@ -238,14 +316,30 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
                 print(x[a][b]) 
                 fils_constraints=[[(a,b),0],[(a,b),1]]
                 ## step 4.2 création des deux noeuds et on les ajoute à la queue q
-                q.append(Node(None,None,fils_constraints[0],current.get_level()+1,deepcopy(current)))
-                q.append(Node(None,None,fils_constraints[1],current.get_level()+1,deepcopy(current)))
+                node_right = Node(None,None,fils_constraints[0],current.get_level()+1,current,None,None)
+                node_left = Node(None,None,fils_constraints[1],current.get_level()+1,current,None,None)
+                current.set_right_child(node_right)
+                current.set_left_child(node_left)
+                tree_node.set_right_child(node_right)
+                tree_node.set_left_child(node_left)
+                q.append(node_right)
+                q.append(node_left)
+                if tree_node.get_level()!=0:
+                    print(tree_node.get_dad().get_lb())
+                    print(tree_node.get_dad().get_ub())
+                    tree_node.update_lb_ub()
+                    print(tree_node.get_dad().get_lb())
+                    print(tree_node.get_dad().get_ub()) 
+                #current = update_lb_ub(current)
                 #check_results_x(current_instance)
+                print(root_node.get_left_child().get_level())
         
 
 
     # step 5 
-    visited.append(deepcopy(current))
+
+ 
+    #visited.append(current)
     
     iteration+=1
 #for node in visited:
@@ -253,7 +347,8 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
 
 #check_results_x(current_instance)
 #check_results_y(current_instance)
-
+#print(visited[0].get_ub())
+#print(visited[0].get_lb())
    
 
 """
