@@ -179,7 +179,7 @@ def solve_instnc(instnc):
         obj = (0,0,0)
         return obj 
 
-instance_name="bin_pack_40_1.dat"
+instance_name="bin_pack_90_0.dat"
 file = './Instances/' + instance_name
 data.load(filename=file)
 instance = model.create_instance(data)
@@ -193,15 +193,19 @@ for j in range(len(list(instance.size))-1):
 iteration = 0
 visited = []
 q = deque([])
+tree_node_list = deque([])
 root_node = Node(None,None,None,0,None,None,None)
+tree_node_list.append(root_node)
 q.append(root_node)
 start_time1 = time.time()
 while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
     current = q.pop()  # Depth
     #current = q.popleft() # Breadth
+    
+    """
     if current == root_node:
         tree_node = root_node
-    
+    # code pour mettre 
     elif current != root_node:
         if tree_node.get_level() < current.get_level():
             temp_node = current.get_dad()
@@ -224,7 +228,7 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
             if tree_node.get_right_child()==current:
                 print("trouvey4")
                 tree_node = tree_node.get_right_child()
-            
+    """    
 
 
     current_instance = deepcopy(instance)
@@ -253,7 +257,8 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
     lb = ceil(deepcopy(current_sol[0])) #résultat de la fonction objective arrondis à la valeur supérieur car on traitre des solutions entières
     
     current.set_lb(lb)
-    tree_node.set_lb(lb)
+
+    #tree_node.set_lb(lb)
 
     print("THIS IS LB ",lb)
 
@@ -293,7 +298,7 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
 
         ub = boxes_used
         current.set_ub(ub)
-        tree_node.set_ub(ub)
+        #tree_node.set_ub(ub)
         print("THIS IS UB",ub)
     
     # step 4 if solution trouvée possède soit ub!=lb, soit sol faisable non entière
@@ -316,24 +321,53 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
                 print(x[a][b]) 
                 fils_constraints=[[(a,b),0],[(a,b),1]]
                 ## step 4.2 création des deux noeuds et on les ajoute à la queue q
-                node_right = Node(None,None,fils_constraints[0],current.get_level()+1,current,None,None)
-                node_left = Node(None,None,fils_constraints[1],current.get_level()+1,current,None,None)
-                current.set_right_child(node_right)
-                current.set_left_child(node_left)
-                tree_node.set_right_child(node_right)
-                tree_node.set_left_child(node_left)
-                q.append(node_right)
-                q.append(node_left)
+                #node_right = Node(None,None,fils_constraints[0],current.get_level()+1,current,None,None)
+                #node_left = Node(None,None,fils_constraints[1],current.get_level()+1,current,None,None)
+                current.set_right_child(Node(None,None,fils_constraints[0],current.get_level()+1,current,None,None))
+                current.set_left_child(Node(None,None,fils_constraints[1],current.get_level()+1,current,None,None))
+                #tree_node.set_right_child(node_right)
+                #tree_node.set_left_child(node_left)
+                q.append(current.get_right_child())
+                q.append(current.get_left_child())
+                if current.get_level()!=0:
+                    print(current.get_dad().get_lb())
+                    print(current.get_dad().get_ub())
+                    current.update_lb_ub()
+                    print(current.get_dad().get_lb())
+                    print(current.get_dad().get_ub())
+
+                    temp_dad = deepcopy(current)
+                    bool_val = False
+                    while temp_dad != None:
+                        print("this is the lb and ub of node of lvl : ",temp_dad.get_level()," ",temp_dad.get_lb()," ",temp_dad.get_ub())
+                        if temp_dad.get_lb() == temp_dad.get_ub():
+                            bool_val = True
+                        temp_dad = temp_dad.get_dad() 
+                    """"
+                    while  (temp_dad.get_dad() != None):
+                        print(1)
+                        if temp_dad.get_ub() == temp_dad.get_lb():
+                            print(2)
+                            bool_val = True
+                            temp_dad = temp_dad.get_dad()
+                    """
+                    if bool_val == True:
+                        current = q.pop()
+                        current = q.pop()
+
+                
+                """
                 if tree_node.get_level()!=0:
                     print(tree_node.get_dad().get_lb())
                     print(tree_node.get_dad().get_ub())
                     tree_node.update_lb_ub()
                     print(tree_node.get_dad().get_lb())
                     print(tree_node.get_dad().get_ub()) 
+                """
                 #current = update_lb_ub(current)
                 #check_results_x(current_instance)
-                print(root_node.get_left_child().get_level())
-        
+                
+    iteration+=1    
 
 
     # step 5 
@@ -341,10 +375,12 @@ while (len(q) != 0) and (iteration<20000) and (time.time() < start_time1 + 600):
  
     #visited.append(current)
     
-    iteration+=1
+print("SOLUTION")
+while current != None:
+    print("this is the lb and ub of node of lvl : ",current.get_level()," ",current.get_lb()," ",current.get_ub())
+    current = current.get_dad() 
 #for node in visited:
 #    print(node.get_level())
-
 #check_results_x(current_instance)
 #check_results_y(current_instance)
 #print(visited[0].get_ub())
