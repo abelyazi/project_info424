@@ -130,17 +130,47 @@ def check_dad_ub_are_bigger_than_lb_current(node):
             return False
         current_n = deepcopy(current_n.get_dad())
     return True
-            
 
 
 # Résolution d'une instance quelconque
-def solve_instnc(instnc):
+def solve_bp_lp(instance_name):
+    file = './Instances/' + instance_name
+    data.load(filename=file)
+
+    instance = model.create_instance(data)
+    opt = pyo.SolverFactory('glpk')
+
+    start_time = time.time()
+    opt.solve(instance)
+    tts = time.time() - start_time
+    print("LP relaxation of " + instance_name + " solved in %s seconds." % tts)
+
+    x = []
+    for p in range(len(list(instance.size))):
+        x.append([])
+        for b in range(len(list(instance.size))):
+            x[p].append(0)
+    for p in range(len(list(instance.size))):
+        for b in range(len(list(instance.size))):
+            x[p][b] = pyo.value(instance.x[p, b])
+
+    y = []
+    for i in instance.y:
+        y.append(pyo.value(instance.y[i]))
+
+    obj = instance.OBJ()
+
+    return obj, x, y
+
+
+
+def solve_instnc_for_BnB(instnc):
     try:
         instance = instnc
         opt = pyo.SolverFactory('glpk')
-        start_time = time.time()
+        #start_time = time.time()
         opt.solve(instance)
-        print("LP solved in %s seconds." % (time.time() - start_time))
+        #print("LP solved in %s seconds." % (time.time() - start_time))
         x = []
         for p in range(len(list(instance.size))):
             x.append([])
@@ -158,9 +188,10 @@ def solve_instnc(instnc):
     except:
         print("Solution Infeasible")
         obj = (0,0,0)
-        return obj 
+        return obj
 
-def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_limit):
+
+def branch_and_bound(instance_name, branching_scheme, valid_inequalities,time_limit):
     """Etablissement variables et paramètres"""
     model = pyo.AbstractModel()
     data = pyo.DataPortal(model=model)
@@ -182,7 +213,31 @@ def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_lim
     
     for j in range(len(list(instance.size))-1):
         instance.Constraints.add(instance.y[j] >= instance.y[j+1] )
+    """
+    instance_cp = deepcopy(instance)
+    sol_cp = solve_instnc(instance_cp)
+    x_cp = sol_cp[1]
+    x_cp_new = []
+    for b in range(len(x_cp)):
+        valeur = 0
+        for p in range(len(x_cp)):
+            if (x_cp[p][b] > 0) and (x_cp[p][b] < 1):
+                if x_cp[p][b] >= valeur:
+                    valeur = x_cp[p][b]
+                    u = p, b
+        x_cp_new.append(u)
 
+    for elem_cp in x_cp_new:
+        index_p = elem_cp[0]
+        index_b = elem_cp[1]
+        expr = 0
+        s_cp = pyo.value(instance.size[index_p])
+        for k in range(len(x_cp)):
+            new_coef = (pyo.value(instance.size[k])) / s_cp
+            expr += floor(new_coef) * instance.x[(k, index_b)]
+        coef_y = floor((pyo.value(instance.cap)) / s_cp)
+        instance.Constraints.add(expr <= coef_y * instance.y[index_b])
+    """
     q = deque([])
     root_node = Node(None,None,None,0,None,None,None)
     q.append(root_node)
@@ -212,10 +267,10 @@ def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_lim
 
 
         # step 2 établissement lb : résolution du problem en ajoutant la liste constraintes au problème de base
-        current_sol = solve_instnc(current_instance)
+        current_sol = solve_instnc_for_BnB(current_instance)
         lb = ceil(deepcopy(current_sol[0])) #résultat de la fonction objective arrondis à la valeur supérieur car on traitre des solutions entières
         current.set_lb(lb)
-        print("THIS IS LB ",lb)
+        #print("THIS IS LB ",lb)
 
         
         # step 3 etablissement ub : réparation de la solution trouvé et établissement du lb
@@ -253,7 +308,7 @@ def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_lim
 
             ub = boxes_used
             current.set_ub(ub)
-            print("THIS IS UB",ub)
+            #print("THIS IS UB",ub)
         
         # step 4 if solution trouvée possède soit ub!=lb, soit sol faisable non entière
         
@@ -272,8 +327,8 @@ def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_lim
                                     temp = val
                                     a,b = i,j
                                     
-                    print((a,b))               
-                    print(x[a][b]) 
+                    #print((a,b))
+                    #print(x[a][b])
                     fils_constraints=[[(a,b),0],[(a,b),1]]
                     ## step 4.2 création des deux noeuds et on les ajoute à la queue q
                     current.set_right_child(Node(None,None,fils_constraints[0],current.get_level()+1,current,None,None))
@@ -281,16 +336,16 @@ def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_lim
                     q.append(current.get_right_child())
                     q.append(current.get_left_child())
                     if current.get_level()!=0:
-                        print(current.get_dad().get_lb())
-                        print(current.get_dad().get_ub())
+                        #print(current.get_dad().get_lb())
+                        #print(current.get_dad().get_ub())
                         current.update_lb_ub()
-                        print(current.get_dad().get_lb())
-                        print(current.get_dad().get_ub())
+                        #print(current.get_dad().get_lb())
+                        #print(current.get_dad().get_ub())
 
                         temp_dad = deepcopy(current)
                         bool_val = False
                         while temp_dad != None:
-                            print("this is the lb and ub of node of lvl : ",temp_dad.get_level()," ",temp_dad.get_lb()," ",temp_dad.get_ub())
+                            #print("this is the lb and ub of node of lvl : ",temp_dad.get_level()," ",temp_dad.get_lb()," ",temp_dad.get_ub())
                             if temp_dad.get_lb() == temp_dad.get_ub():
                                 bool_val = True
                             temp_dad = temp_dad.get_dad()
@@ -300,11 +355,25 @@ def branch_and_bound(instance_name, branching_scheme,valid_inequalities,time_lim
     
     while current.get_dad() != None:
         current = current.get_dad()
-    return current.get_lb(),current.get_ub()
-                
+    return current.get_lb(), current.get_ub()
 
-instance_name="bin_pack_60_0.dat"  
-l_b, u_b = branch_and_bound(instance_name,1,0,600)
-print("Solution lb et ub du root node",l_b, u_b)
 
-   
+
+instance_name="bin_pack_125_1.dat"
+start_time0 = time.time()
+l_b0, u_b0 = branch_and_bound(instance_name,0,0,60)
+time_BnB0 = time.time() - start_time0
+
+start_time1 = time.time()
+l_b1, u_b1 = branch_and_bound(instance_name,1,0,60)
+time_BnB1 = time.time() - start_time1
+
+print("Depth first: ")
+print(time_BnB0, ' seconds')
+print("Solution lb et ub du root node",l_b0, u_b0)
+
+print('\n')
+
+print("Breadth first: ")
+print(time_BnB1, ' seconds')
+print("Solution lb et ub du root node",l_b1, u_b1)
