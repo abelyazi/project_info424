@@ -73,12 +73,10 @@ class Node:
                 new_bound = False
 
                 if ub_min != dad.get_ub():
-                    print("chgt ub")
                     self.get_dad().set_ub(ub_min)
                     new_bound = True
 
                 if lb_min != dad.get_lb():
-                    print("chgt lb")
                     self.get_dad().set_lb(lb_min)
                     new_bound = True
 
@@ -134,6 +132,20 @@ def check_dad_ub_are_bigger_than_lb_current(node):
 
 # Résolution d'une instance quelconque
 def solve_bp_lp(instance_name):
+    """Etablissement variables et paramètres"""
+    model = pyo.AbstractModel()
+    data = pyo.DataPortal(model=model)
+    model.I = pyo.Set()
+    model.P = pyo.Set(initialize=model.I)
+    model.B = pyo.Set(initialize=model.I)
+    model.size = pyo.Param(model.P)
+    model.cap = pyo.Param()
+    model.x = pyo.Var(model.P,model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
+    model.y = pyo.Var(model.B, domain=pyo.NonNegativeReals, bounds=(0,1))
+    model.Constraints = pyo.ConstraintList()
+    model.OBJ = pyo.Objective(rule=obj_expression)
+    model.xpbConstraint = pyo.Constraint(model.P, rule=x_constraint_rule)
+    model.sxConstraint = pyo.Constraint(model.B, rule=sx_constraint_rule)
     file = './Instances/' + instance_name
     data.load(filename=file)
 
@@ -213,31 +225,33 @@ def branch_and_bound(instance_name, branching_scheme, valid_inequalities,time_li
     
     for j in range(len(list(instance.size))-1):
         instance.Constraints.add(instance.y[j] >= instance.y[j+1] )
-    """
-    instance_cp = deepcopy(instance)
-    sol_cp = solve_instnc(instance_cp)
-    x_cp = sol_cp[1]
-    x_cp_new = []
-    for b in range(len(x_cp)):
-        valeur = 0
-        for p in range(len(x_cp)):
-            if (x_cp[p][b] > 0) and (x_cp[p][b] < 1):
-                if x_cp[p][b] >= valeur:
-                    valeur = x_cp[p][b]
-                    u = p, b
-        x_cp_new.append(u)
+    
 
-    for elem_cp in x_cp_new:
-        index_p = elem_cp[0]
-        index_b = elem_cp[1]
-        expr = 0
-        s_cp = pyo.value(instance.size[index_p])
-        for k in range(len(x_cp)):
-            new_coef = (pyo.value(instance.size[k])) / s_cp
-            expr += floor(new_coef) * instance.x[(k, index_b)]
-        coef_y = floor((pyo.value(instance.cap)) / s_cp)
-        instance.Constraints.add(expr <= coef_y * instance.y[index_b])
-    """
+    if valid_inequalities !=0:
+        instance_cp = deepcopy(instance)
+        sol_cp = solve_instnc_for_BnB(instance_cp)
+        x_cp = sol_cp[1]
+        x_cp_new = []
+        for b in range(len(x_cp)):
+            valeur = 0
+            for p in range(len(x_cp)):
+                if (x_cp[p][b] > 0) and (x_cp[p][b] < 1):
+                    if x_cp[p][b] >= valeur:
+                        valeur = x_cp[p][b]
+                        u = p, b
+            x_cp_new.append(u)
+
+        for elem_cp in x_cp_new:
+            index_p = elem_cp[0]
+            index_b = elem_cp[1]
+            expr = 0
+            s_cp = pyo.value(instance.size[index_p])
+            for k in range(len(x_cp)):
+                new_coef = (pyo.value(instance.size[k])) / s_cp
+                expr += floor(new_coef) * instance.x[(k, index_b)]
+            coef_y = floor((pyo.value(instance.cap)) / s_cp)
+            instance.Constraints.add(expr <= coef_y * instance.y[index_b])
+    
     q = deque([])
     root_node = Node(None,None,None,0,None,None,None)
     q.append(root_node)
@@ -327,8 +341,6 @@ def branch_and_bound(instance_name, branching_scheme, valid_inequalities,time_li
                                     temp = val
                                     a,b = i,j
                                     
-                    #print((a,b))
-                    #print(x[a][b])
                     fils_constraints=[[(a,b),0],[(a,b),1]]
                     ## step 4.2 création des deux noeuds et on les ajoute à la queue q
                     current.set_right_child(Node(None,None,fils_constraints[0],current.get_level()+1,current,None,None))
@@ -359,7 +371,7 @@ def branch_and_bound(instance_name, branching_scheme, valid_inequalities,time_li
 
 
 
-instance_name="bin_pack_125_1.dat"
+instance_name="bin_pack_100_1.dat"
 start_time0 = time.time()
 l_b0, u_b0 = branch_and_bound(instance_name,0,0,60)
 time_BnB0 = time.time() - start_time0
